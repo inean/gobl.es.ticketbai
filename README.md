@@ -215,6 +215,18 @@ When the supplier is an individual in Bizkaia, their IAE-style activity code (_E
 
 Álava (`VI`) and Gipuzkoa (`SS`) are unaffected — their gateways do not expose model selection.
 
+Applications that persist signed XML can build a subchapter 1.1 Alta with
+[`bizkaia.NewAltaRequest`](bizkaia/alta.go). It returns the gzipped request
+body and HTTP headers for the caller's transport.
+
+```go
+body, headers, err := bizkaia.NewAltaRequest(signedXML, bizkaia.AltaData{
+    Model: "240", NIF: issuerNIF, Name: issuerName, Year: issueYear,
+})
+```
+
+For model 140, set `Activity` to the invoice supplier's IAE epígrafe.
+
 ## Tags, Keys and Extensions
 
 In order to provide the supplier specific data required by TicketBAI, invoices need to include a bit of extra data. We've managed to simplify these into specific cases.

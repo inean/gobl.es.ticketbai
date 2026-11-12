@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/invopop/gobl.es.ticketbai/internal/gateways/ebizkaia"
+	"github.com/invopop/gobl.es.ticketbai/bizkaia"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -99,8 +99,7 @@ func TestEBizkaiaSendRequestErrors(t *testing.T) {
 			c := newEbizkaia(EnvironmentSandbox, new(tls.Config))
 			c.client.SetBaseURL(srv.URL)
 
-			req := &ebizkaia.Request{Header: []byte("{}"), Payload: []byte("payload")}
-			err := c.sendRequest(context.Background(), req, eBizkaiaExecutePath, nil)
+			err := c.sendRequest(context.Background(), []byte("payload"), nil, eBizkaiaExecutePath, nil)
 			require.Error(t, err)
 			assert.ErrorIs(t, err, tt.target)
 
@@ -112,7 +111,15 @@ func TestEBizkaiaSendRequestErrors(t *testing.T) {
 	}
 
 	t.Run("accepted", func(t *testing.T) {
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		body, headers, err := bizkaia.NewAltaRequest([]byte("<TicketBai/>"), bizkaia.AltaData{
+			Model: "240", NIF: "B64847106", Name: "Test issuer", Year: "2026",
+		})
+		require.NoError(t, err)
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			for name, value := range headers {
+				assert.Equal(t, value, r.Header.Get(name))
+			}
+			assert.Equal(t, int64(len(body)), r.ContentLength)
 			w.Header().Set(eBizkaiaN3ResponseHeader, "Correcto")
 		}))
 		defer srv.Close()
@@ -120,7 +127,6 @@ func TestEBizkaiaSendRequestErrors(t *testing.T) {
 		c := newEbizkaia(EnvironmentSandbox, new(tls.Config))
 		c.client.SetBaseURL(srv.URL)
 
-		req := &ebizkaia.Request{Header: []byte("{}"), Payload: []byte("payload")}
-		assert.NoError(t, c.sendRequest(context.Background(), req, eBizkaiaExecutePath, nil))
+		assert.NoError(t, c.sendRequest(context.Background(), body, headers, eBizkaiaExecutePath, nil))
 	})
 }

@@ -23,6 +23,7 @@ const (
 	apartado1_1                 = "1.1"
 	Modelo240                   = "240"
 	Modelo140                   = "140"
+	n3DataHeader                = "eus-bizkaia-n3-data"
 	schemaLROE240ConSGAlta      = "https://www.batuz.eus/fitxategiak/batuz/LROE/esquemas/LROE_PJ_240_1_1_FacturasEmitidas_ConSG_AltaPeticion_V1_0_2.xsd"
 	schemaLROE240ConSGConsulta  = "https://www.batuz.eus/fitxategiak/batuz/LROE/esquemas/LROE_PJ_240_1_1_FacturasEmitidas_ConSG_ConsultaPeticion_V1_0_0.xsd"
 	schemaLROE240ConSGAnulacion = "https://www.batuz.eus/fitxategiak/batuz/LROE/esquemas/LROE_PJ_240_1_1_FacturasEmitidas_ConSG_AnulacionPeticion_V1_0_0.xsd"
@@ -40,12 +41,10 @@ const (
 	operacionEnumConsulta                       = "C00"
 )
 
-// Request tries to keep all the request information in one place ready to send to the
-// Bizkaia servers. They really out did themselves while defining these connections making it
-// increadibly complex.
+// Request contains the gzipped body and HTTP headers for a Bizkaia request.
 type Request struct {
-	Header  []byte // JSON special data header
-	Payload []byte // already gzipped
+	Headers map[string]string
+	Payload []byte
 }
 
 // N3Header is the structure that needs to be included in requests containing
@@ -440,12 +439,18 @@ func newRequest(sup *Supplier, body any) (*Request, error) {
 		return nil, fmt.Errorf("compressing body: %w", err)
 	}
 
-	jhead := newN3Header(sup)
-	req.Header, err = json.Marshal(jhead)
+	header, err := json.Marshal(newN3Header(sup))
 	if err != nil {
 		return nil, fmt.Errorf("json header: %w", err)
 	}
-
+	req.Headers = map[string]string{
+		"Content-Encoding":            "gzip",
+		"Content-Type":                "application/octet-stream",
+		"Accept-Encoding":             "gzip",
+		"eus-bizkaia-n3-content-type": "application/xml",
+		"eus-bizkaia-n3-version":      "1.0",
+		n3DataHeader:                  string(header),
+	}
 	return req, nil
 }
 

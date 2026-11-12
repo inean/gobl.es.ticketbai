@@ -9,6 +9,7 @@ import (
 	"slices"
 
 	"github.com/go-resty/resty/v2"
+	"github.com/invopop/gobl.es.ticketbai/bizkaia"
 	"github.com/invopop/gobl.es.ticketbai/convert"
 	"github.com/invopop/gobl.es.ticketbai/internal/gateways/ebizkaia"
 	"github.com/invopop/gobl/addons/es/tbai"
@@ -21,13 +22,10 @@ import (
 
 const (
 	// Requests
-	eBizkaiaProductionBaseURL   = "https://sarrerak.bizkaia.eus"
-	eBizkaiaTestingBaseURL      = "https://pruesarrerak.bizkaia.eus"
-	eBizkaiaExecutePath         = "/N3B4000M/aurkezpena"
-	eBizkaiaQueryPath           = "/N3B4001M/kontsulta"
-	eBizkaiaN3VersionHeader     = "eus-bizkaia-n3-version"
-	eBizkaiaN3ContentTypeHeader = "eus-bizkaia-n3-content-type"
-	eBizkaiaN3DataHeader        = "eus-bizkaia-n3-data"
+	eBizkaiaProductionBaseURL = "https://sarrerak.bizkaia.eus"
+	eBizkaiaTestingBaseURL    = "https://pruesarrerak.bizkaia.eus"
+	eBizkaiaExecutePath       = "/N3B4000M/aurkezpena"
+	eBizkaiaQueryPath         = "/N3B4001M/kontsulta"
 
 	// Responses
 	eBizkaiaN3MessageHeader   = "Eus-Bizkaia-N3-Mensaje-Respuesta"
@@ -79,14 +77,13 @@ func (c *EBizkaiaConn) Post(ctx context.Context, inv *bill.Invoice, doc *convert
 	}
 
 	model := modelFor(inv.Supplier.TaxID)
-	sup := &ebizkaia.Supplier{
+	body, headers, err := bizkaia.NewAltaRequest(payload, bizkaia.AltaData{
 		Year:     doc.IssueYear(),
 		NIF:      doc.Sujetos.Emisor.NIF,
 		Name:     doc.Sujetos.Emisor.ApellidosNombreRazonSocial,
 		Model:    model,
 		Activity: inv.Supplier.Ext.Get(tbai.ExtKeyBIActivity).String(),
-	}
-	req, err := ebizkaia.NewCreateRequest(sup, payload)
+	})
 	if err != nil {
 		return fmt.Errorf("create request: %w", err)
 	}
@@ -101,7 +98,7 @@ func (c *EBizkaiaConn) Post(ctx context.Context, inv *bill.Invoice, doc *convert
 		resp = new(ebizkaia.LROEPJ240FacturasEmitidasConSGAltaRespuesta)
 	}
 
-	err = c.sendRequest(ctx, req, eBizkaiaExecutePath, resp)
+	err = c.sendRequest(ctx, body, headers, eBizkaiaExecutePath, resp)
 	if errors.Is(err, ErrValidation) {
 		code := resp.FirstErrorCode()
 		if code == eBizkaiaN3RespCodeDuplicated {
@@ -132,7 +129,7 @@ func (c *EBizkaiaConn) Fetch(ctx context.Context, nif, name, year string, page i
 	}
 
 	resp := ebizkaia.LROEPJ240FacturasEmitidasConSGConsultaRespuesta{}
-	if err := c.sendRequest(ctx, d, eBizkaiaQueryPath, &resp); err != nil {
+	if err := c.sendRequest(ctx, d.Payload, d.Headers, eBizkaiaQueryPath, &resp); err != nil {
 		return nil, fmt.Errorf("sending fetch request: %w", err)
 	}
 
@@ -163,7 +160,7 @@ func (c *EBizkaiaConn) Cancel(ctx context.Context, inv *bill.Invoice, doc *conve
 		return fmt.Errorf("create request: %w", err)
 	}
 
-	return c.sendRequest(ctx, req, eBizkaiaExecutePath, nil)
+	return c.sendRequest(ctx, req.Payload, req.Headers, eBizkaiaExecutePath, nil)
 }
 
 // PostAmendment is not supported in Bizkaia, which only offers the Zuzendu
@@ -178,18 +175,15 @@ func (c *EBizkaiaConn) CancelAmendment(_ context.Context, _ *bill.Invoice, _ *co
 	return ErrValidation.withMessage("amendments not available in Bizkaia")
 }
 
-func (c *EBizkaiaConn) sendRequest(ctx context.Context, doc *ebizkaia.Request, path string, resp interface{}) error {
+func (c *EBizkaiaConn) sendRequest(ctx context.Context, body []byte, headers map[string]string, path string, resp interface{}) error {
 	r := c.client.R().
 		SetContext(ctx).
-		SetHeader("Content-Encoding", "gzip").
-		SetHeader("Content-Type", "application/octet-stream").
-		SetHeader("Accept-Encoding", "gzip").
 		SetContentLength(true).
-		SetHeaderVerbatim(eBizkaiaN3ContentTypeHeader, "application/xml").
-		SetHeaderVerbatim(eBizkaiaN3DataHeader, string(doc.Header)).
-		SetHeaderVerbatim(eBizkaiaN3VersionHeader, "1.0").
-		SetBody(doc.Payload).
+		SetBody(body).
 		SetResult(resp)
+	for name, value := range headers {
+		r.SetHeaderVerbatim(name, value)
+	}
 
 	res, err := r.Post(path)
 	if err != nil {

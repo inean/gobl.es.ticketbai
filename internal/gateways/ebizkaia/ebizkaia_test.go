@@ -68,7 +68,7 @@ func TestNewCreateRequestModelo140(t *testing.T) {
 	}
 
 	var jhead N3Header
-	if err := json.Unmarshal(req.Header, &jhead); err != nil {
+	if err := json.Unmarshal([]byte(req.Headers[n3DataHeader]), &jhead); err != nil {
 		t.Fatalf("json header: %v", err)
 	}
 	if jhead.DatosRelevantes.Modelo != Modelo140 {
@@ -111,7 +111,7 @@ func TestNewCreateRequestModelo240(t *testing.T) {
 			}
 
 			var jhead N3Header
-			if err := json.Unmarshal(req.Header, &jhead); err != nil {
+			if err := json.Unmarshal([]byte(req.Headers[n3DataHeader]), &jhead); err != nil {
 				t.Fatalf("json header: %v", err)
 			}
 			if jhead.DatosRelevantes.Modelo != Modelo240 {
